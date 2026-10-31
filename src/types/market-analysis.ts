@@ -24,6 +24,58 @@ export interface MarketSummaryMetrics {
     badge: string; // "Live"
     relativeCrawlText: string; // "Last crawl completed 12 min ago"
   };
+  // 4 Primary Grounded KPIs
+  evidenceDepth?: {
+    count: number;
+    totalDocuments?: number;
+    semanticScholarCount: number;
+    crossrefCount: number;
+    githubCount: number;
+    webCount: number;
+    definition: string;
+    caveat: string;
+    coverageCaveat?: string;
+    isAvailable: boolean;
+    byProvider?: Record<string, number>;
+  };
+  researchRecency?: {
+    percentage: number | null;
+    numerator: number;
+    denominator: number;
+    recentCount?: number;
+    totalDatedPapers?: number;
+    observationDate: string;
+    recencyWindow: string;
+    publicationDateCoverage: string;
+    coverageText?: string;
+    caveat?: string;
+    isAvailable: boolean;
+    status?: "available" | "unavailable";
+  };
+  implementationEcosystem?: {
+    count: number;
+    repositoryCount?: number;
+    activeCount: number;
+    archivedCount: number;
+    totalStars: number;
+    averageForks: number;
+    topLanguages: string[];
+    maintenanceClassification: string;
+    metadataCoverage: string;
+    contextText?: string;
+    isAvailable: boolean;
+    status?: "available" | "unavailable";
+  };
+  evidenceCorroboration?: {
+    percentage: number | null;
+    corroboratedFindings: number;
+    corroboratedCount?: number;
+    totalEligibleFindings: number;
+    totalFindings?: number;
+    definition: string;
+    isAvailable: boolean;
+    status?: "available" | "unavailable";
+  };
 }
 
 export interface DemandChartPoint {
@@ -185,10 +237,24 @@ export interface TopAcademicPaper {
 
 export interface ResearchLandscapeData {
   totalPapersAnalyzed: number;
+  datedWorksCount?: number;
+  undatedCount?: number;
   academicVelocity: string;
   publicationsByYear: ResearchPublicationYear[];
   topPapers: TopAcademicPaper[];
   emergingTopics: string[];
+  interpretation?: {
+    heading: string;
+    text: string;
+    methodologicalNote: string;
+  };
+  topVenues?: AcademicVenueChip[];
+  totalVenuesCount?: number;
+  peakYear?: number;
+  peakCount?: number;
+  peakShare?: number;
+  minYear?: number;
+  maxYear?: number;
 }
 
 export interface GithubRepoItem {
@@ -198,8 +264,9 @@ export interface GithubRepoItem {
   forks: number;
   language: string;
   topics: string[];
-  activityStatus: "Active" | "Maintained" | "Stale" | "Archived";
+  activityStatus: "Active" | "Maintained" | "Stale" | "Archived" | string;
   relevance: string;
+  description?: string;
 }
 
 export interface GithubLanguageShare {
@@ -215,8 +282,10 @@ export interface GithubEcosystemData {
   averageForks: number;
   topRepositories: GithubRepoItem[];
   languageDistribution: GithubLanguageShare[];
-  ecosystemMaturity: "Nascent" | "Growing" | "Mature";
+  ecosystemMaturity: "Nascent" | "Growing" | "Mature" | string;
   openSourceGap: string;
+  warning?: string;
+  primaryLanguages?: { name: string; count: number }[];
 }
 
 export interface EvidenceInsightCard {
@@ -263,7 +332,136 @@ export interface SourceCoverageData {
   activeProviders: number;
   totalRecordsFound: number;
   totalRecordsIndexed: number;
+  providersIndexedText?: string;
+  summaryText?: string;
   providers: SourceProviderStatus[];
+  methodology?: {
+    scope: string;
+    eligibilityRules: string;
+    deduplicationMethod: string;
+    dateWindow: string;
+    limitations: string;
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RECONSTRUCTED MARKET INTELLIGENCE TARGET SECTIONS
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface ScopeBannerData {
+  scopeText: string;
+  analyzedDateText: string;
+  persistenceText: string;
+  runIdText: string;
+  analysisId?: string;
+}
+
+export interface KpiCardAcademicLiterature {
+  count: number;
+  label: string;
+  sublabel: string;
+  footer: string;
+  badge: string;
+  isAvailable: boolean;
+}
+
+export interface KpiCardTemporalMetadata {
+  percentage: number;
+  datedCount: number;
+  totalCount: number;
+  label: string;
+  sublabel: string;
+  footer: string;
+  badge: string;
+  isAvailable: boolean;
+}
+
+export interface KpiCardDeveloperTooling {
+  count: number;
+  label: string;
+  sublabel: string;
+  footer: string;
+  badge: string;
+  isAvailable: boolean;
+}
+
+export interface KpiCardSynthesizedEvidence {
+  count: number;
+  label: string;
+  sublabel: string;
+  footer: string;
+  badge: string;
+  isAvailable: boolean;
+}
+
+export interface KpiCardStorageProvenance {
+  count: number;
+  label: string;
+  sublabel: string;
+  footer: string;
+  badge: string;
+  isAvailable: boolean;
+}
+
+export interface FiveKpiCards {
+  academicLiterature: KpiCardAcademicLiterature;
+  temporalMetadata: KpiCardTemporalMetadata;
+  developerTooling: KpiCardDeveloperTooling;
+  synthesizedEvidence: KpiCardSynthesizedEvidence;
+  storageProvenance: KpiCardStorageProvenance;
+}
+
+export interface AcademicVenueChip {
+  name: string;
+  count: number;
+}
+
+export interface SupportingSourceChip {
+  id: string;
+  title: string;
+  doi?: string;
+  url?: string;
+  sourceType?: string;
+  authorOrVenue?: string;
+  excerpt?: string;
+  relevanceScore?: number;
+  confidence?: number;
+  claim?: string;
+}
+
+export interface EvidenceBackedInsightItem {
+  id: string;
+  rank: number;
+  category: string;
+  filterCategory: "technical" | "operational" | "all" | string;
+  strengthBadge: string;
+  title: string;
+  statement: string;
+  relevanceExplanation: string;
+  sources: SupportingSourceChip[];
+}
+
+export interface EvidenceBackedInsightsData {
+  totalObservations: number;
+  filterCounts: {
+    all: number;
+    technical: number;
+    operational: number;
+  };
+  items: EvidenceBackedInsightItem[];
+}
+
+export interface ResearchPriorityItem {
+  id: string;
+  title: string;
+  statement: string;
+  badge: string;
+}
+
+export interface ResearchPrioritiesData {
+  totalQuestions: number;
+  calloutText: string;
+  questions: ResearchPriorityItem[];
 }
 
 export interface MarketIntelligencePayload {
@@ -275,7 +473,12 @@ export interface MarketIntelligencePayload {
   painPoints: PainPointRankingItem[];
   sentiment: SentimentBreakdownData;
   strategicOpportunity: StrategicOpportunity;
-  // Enhanced Sections
+  // Reconstructed Sections
+  scopeBanner?: ScopeBannerData;
+  fiveKpiCards?: FiveKpiCards;
+  evidenceBackedInsights?: EvidenceBackedInsightsData;
+  researchPriorities?: ResearchPrioritiesData;
+  // Complementary Sections
   marketSize?: MarketSizeEstimates;
   competitorLandscape?: CompetitorLandscapeData;
   researchLandscape?: ResearchLandscapeData;
@@ -284,3 +487,4 @@ export interface MarketIntelligencePayload {
   researchGaps?: ResearchGapsData;
   sourceCoverage?: SourceCoverageData;
 }
+

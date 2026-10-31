@@ -28,10 +28,11 @@ const CATEGORY_CONFIG: Record<
 };
 
 export function EvidenceInsights({ data }: EvidenceInsightsProps) {
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
+
   if (!data) return null;
 
   const { insights, keyTakeaway } = data;
-  const [selectedCategory, setSelectedCategory] = useState<string>("all");
 
   const filteredInsights =
     selectedCategory === "all"

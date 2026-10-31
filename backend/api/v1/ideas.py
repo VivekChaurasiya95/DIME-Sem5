@@ -61,11 +61,8 @@ async def extract_idea_from_text(
     except HTTPException:
         raise
     except Exception as exc:
-        logger.exception("idea_extraction_failed", error=str(exc))
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to extract structured idea: {str(exc)}",
-        )
+        logger.warning("idea_extraction_fallback_triggered: %s. Using heuristic extraction.", exc)
+        return service._heuristic_extract(payload)
 
 
 @router.post(
@@ -93,7 +90,7 @@ async def improve_idea(
     except HTTPException:
         raise
     except Exception as exc:
-        logger.exception("idea_improvement_failed", error=str(exc))
+        logger.exception("idea_improvement_failed: %s", exc)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to improve idea description: {str(exc)}",
@@ -125,7 +122,7 @@ async def builder_chat(
     except HTTPException:
         raise
     except Exception as exc:
-        logger.exception("builder_chat_failed", error=str(exc))
+        logger.exception("builder_chat_failed: %s", exc)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Conversational builder failed: {str(exc)}",
@@ -157,7 +154,7 @@ async def builder_summary(
     except HTTPException:
         raise
     except Exception as exc:
-        logger.exception("builder_summary_failed", error=str(exc))
+        logger.exception("builder_summary_failed: %s", exc)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to summarize conversation: {str(exc)}",

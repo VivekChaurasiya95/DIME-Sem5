@@ -429,7 +429,7 @@ async def create_comparison(
             "message": "Comparison completed and saved successfully",
         }
     except Exception as exc:
-        logger.exception("comparison_creation_failed", error=str(exc))
+        logger.exception("comparison_creation_failed: %s", exc)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to generate comparison: {str(exc)}",

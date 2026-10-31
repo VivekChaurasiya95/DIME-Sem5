@@ -32,115 +32,187 @@ class LLMProvider:
         self.temperature = self.settings.llm_temperature
         self.llm = self._initialize_llm()
 
-    def _initialize_llm(self) -> BaseChatModel:
-        """Initialize the requested LangChain LLM."""
-        if self.provider_name == "openai":
+    def _build_llm(self, provider: str, model: str | None = None) -> BaseChatModel | None:
+        """Instantiate a chat model for a given provider with defensive defaults."""
+        p = provider.lower()
+        if p == "openai" and self.settings.openai_api_key:
             from langchain_openai import ChatOpenAI
-            if not self.settings.openai_api_key:
-                logger.warning("OPENAI_API_KEY is not set.")
             return ChatOpenAI(
                 api_key=self.settings.openai_api_key,
-                model=self.model_name,
-                temperature=self.temperature
+                model=model or "gpt-4o-mini",
+                temperature=self.temperature,
             )
-            
-        elif self.provider_name == "groq":
+        elif p == "groq" and self.settings.groq_api_key:
             from langchain_openai import ChatOpenAI
-            if not self.settings.groq_api_key:
-                logger.warning("GROQ_API_KEY is not set.")
+            # Use qwen/qwen3.8-27b by default on Groq for high accuracy and reliable JSON output
+            target_model = model if model and model not in ("llama3-8b-8192", "nvidia/nemotron-3.5-lightning:free") else "qwen/qwen3.8-27b"
             return ChatOpenAI(
                 api_key=self.settings.groq_api_key,
                 base_url="https://api.groq.com/openai/v1",
-                model=self.model_name,
-                temperature=self.temperature
+                model=target_model,
+                temperature=self.temperature,
+                max_tokens=1024,
             )
-            
-        elif self.provider_name == "nvidia":
+        elif p == "nvidia" and self.settings.nvidia_api_key:
             from langchain_openai import ChatOpenAI
-            if not self.settings.nvidia_api_key:
-                logger.warning("NVIDIA_API_KEY is not set.")
             return ChatOpenAI(
                 api_key=self.settings.nvidia_api_key,
                 base_url="https://openrouter.ai/api/v1",
-                model=self.model_name,
-                temperature=self.temperature
+                model=model or "nvidia/nemotron-3.5-lightning:free",
+                temperature=self.temperature,
+                extra_body={"reasoning": {"effort": "none"}},
             )
-            
-        elif self.provider_name == "gemini":
+        elif p == "gemini" and self.settings.google_api_key:
             from langchain_google_genai import ChatGoogleGenerativeAI
-            if not self.settings.google_api_key:
-                logger.warning("GOOGLE_API_KEY is not set.")
             return ChatGoogleGenerativeAI(
                 api_key=self.settings.google_api_key,
-                model=self.model_name,
-                temperature=self.temperature
+                model=model or "gemini-1.5-flash",
+                temperature=self.temperature,
             )
-            
-        else:
-            raise ValueError(f"Unsupported LLM provider: {self.provider_name}")
+        return None
 
+    def _initialize_llm(self) -> BaseChatModel:
+        """Initialize the requested primary LangChain LLM."""
+        llm = self._build_llm(self.provider_name, self.model_name)
+        if llm is not None:
+            return llm
+        
+        # Fallback to any provider with an available API key
+        if self.settings.groq_api_key:
+            logger.info("Defaulting primary LLM to Groq (qwen/qwen3.8-27b)")
+            built = self._build_llm("groq", "qwen/qwen3.8-27b")
+            if built:
+                return built
+
+        if self.settings.nvidia_api_key:
+            logger.info("Defaulting primary LLM to Nvidia (OpenRouter)")
+            built = self._build_llm("nvidia", "nvidia/nemotron-3.5-lightning:free")
+            if built:
+                return built
+
+        raise ValueError(f"No configured or usable LLM provider found for: {self.provider_name}")
+
+    def _get_candidate_llms(self) -> list[tuple[str, BaseChatModel]]:
+        """Constructs an ordered list of candidate (provider_name, llm) pairs for automatic failover."""
+        candidates: list[tuple[str, BaseChatModel]] = [(self.provider_name, self.llm)]
+        seen_providers = {self.provider_name}
+
+        # Backup 1: Groq
+        if "groq" not in seen_providers and self.settings.groq_api_key:
+            groq_llm = self._build_llm("groq", "qwen/qwen3.8-27b")
+            if groq_llm:
+                candidates.append(("groq", groq_llm))
+                seen_providers.add("groq")
+
+        # Backup 2: Nvidia / OpenRouter
+        if "nvidia" not in seen_providers and self.settings.nvidia_api_key:
+            nv_llm = self._build_llm("nvidia", "nvidia/nemotron-3.5-lightning:free")
+            if nv_llm:
+                candidates.append(("nvidia", nv_llm))
+                seen_providers.add("nvidia")
+
+        # Backup 3: OpenAI
+        if "openai" not in seen_providers and self.settings.openai_api_key:
+            oa_llm = self._build_llm("openai", "gpt-4o-mini")
+            if oa_llm:
+                candidates.append(("openai", oa_llm))
+                seen_providers.add("openai")
+
+        return candidates
 
     def _extract_model_from_text(self, text: str, response_model: Type[T]) -> T:
         """Helper to extract and validate Pydantic model from raw LLM text."""
         cleaned = text.strip()
-        if cleaned.startswith("```"):
-            cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
-            cleaned = re.sub(r"\s*```$", "", cleaned)
-        
+        if "```" in cleaned:
+            fence_match = re.search(r"```(?:json)?\s*(.*?)\s*```", cleaned, re.DOTALL)
+            if fence_match:
+                cleaned = fence_match.group(1).strip()
+            else:
+                cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
+                cleaned = re.sub(r"\s*```$", "", cleaned)
+
         first_brace = cleaned.find("{")
         last_brace = cleaned.rfind("}")
         if first_brace != -1 and last_brace != -1:
-            cleaned = cleaned[first_brace:last_brace + 1]
-            
-        return response_model.model_validate_json(cleaned)
+            cleaned = cleaned[first_brace : last_brace + 1]
+
+        try:
+            return response_model.model_validate_json(cleaned)
+        except Exception:
+            # Loose parse fallback
+            parsed_dict = json.loads(cleaned)
+            if isinstance(parsed_dict, dict):
+                return response_model.model_validate(parsed_dict)
+            raise
 
     async def structured_generate(
-        self, 
-        prompt: str, 
+        self,
+        prompt: str,
         response_model: Type[T],
-        system_prompt: str = "You are an analytical AI assistant."
+        system_prompt: str = "You are an analytical AI assistant.",
     ) -> T:
         """
-        Generates a structured Pydantic response from the configured LLM.
+        Generates a structured Pydantic response with automatic provider failover on rate limits or errors.
         """
-        try:
-            structured_llm = self.llm.with_structured_output(response_model, include_raw=True)
-            
-            messages = [
-                SystemMessage(content=system_prompt),
-                HumanMessage(content=prompt)
-            ]
-            
-            res_dict = await asyncio.wait_for(structured_llm.ainvoke(messages), timeout=50.0)
-            
-            # 1. Direct parsed match
-            if isinstance(res_dict, dict) and res_dict.get("parsed") is not None:
-                parsed = res_dict["parsed"]
-                if isinstance(parsed, response_model):
-                    return parsed
-                if isinstance(parsed, dict):
-                    return response_model.model_validate(parsed)
-                return cast(T, parsed)
-                
-            if isinstance(res_dict, response_model):
-                return res_dict
+        messages = [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=prompt),
+        ]
 
-            # 2. Fallback: Parse from raw message content
-            raw_msg = res_dict.get("raw") if isinstance(res_dict, dict) else None
-            raw_text = getattr(raw_msg, "content", None) if raw_msg else None
-            if isinstance(raw_text, str) and raw_text.strip():
-                try:
-                    return self._extract_model_from_text(raw_text, response_model)
-                except Exception as parse_err:
-                    logger.warning(f"Failed to parse raw text into {response_model.__name__}: {parse_err}")
+        candidates = self._get_candidate_llms()
+        last_error: Exception | None = None
 
-            # 3. Direct raw ainvoke fallback if needed
-            raw_invoke = await asyncio.wait_for(self.llm.ainvoke(messages), timeout=35.0)
-            if hasattr(raw_invoke, "content") and isinstance(raw_invoke.content, str):
-                return self._extract_model_from_text(raw_invoke.content, response_model)
+        for prov_name, candidate_llm in candidates:
+            # 1. Attempt structured output
+            try:
+                structured_llm = candidate_llm.with_structured_output(response_model, include_raw=True)
+                res_dict = await asyncio.wait_for(structured_llm.ainvoke(messages), timeout=60.0)
 
-            raise ValueError(f"LLM returned None for structured output ({self.provider_name}).")
-            
-        except Exception as e:
-            logger.error(f"Error generating structured output from {self.provider_name}: {e}")
-            raise
+                # Direct parsed match
+                if isinstance(res_dict, dict) and res_dict.get("parsed") is not None:
+                    parsed = res_dict["parsed"]
+                    if isinstance(parsed, response_model):
+                        return parsed
+                    if isinstance(parsed, dict):
+                        return response_model.model_validate(parsed)
+                    return cast(T, parsed)
+
+                if isinstance(res_dict, response_model):
+                    return res_dict
+
+                # Parse from raw message content inside structured result
+                raw_msg = res_dict.get("raw") if isinstance(res_dict, dict) else None
+                raw_text = getattr(raw_msg, "content", None) if raw_msg else None
+                if isinstance(raw_text, str) and raw_text.strip():
+                    try:
+                        return self._extract_model_from_text(raw_text, response_model)
+                    except Exception as parse_err:
+                        logger.warning(f"Failed to parse raw text on {prov_name}: {parse_err}")
+            except Exception as struct_err:
+                last_error = struct_err
+                logger.warning(
+                    f"Structured LLM invocation failed for {prov_name} ({struct_err}). Trying fallback on {prov_name}."
+                )
+
+            # 2. Fallback: Direct raw ainvoke with JSON format instruction
+            try:
+                fallback_messages = [
+                    SystemMessage(
+                        content=f"{system_prompt}\nYou MUST output valid JSON conforming strictly to the requested schema."
+                    ),
+                    HumanMessage(
+                        content=f"{prompt}\n\nPlease respond with a valid JSON object matching the required schema."
+                    ),
+                ]
+                raw_invoke = await asyncio.wait_for(candidate_llm.ainvoke(fallback_messages), timeout=60.0)
+                if hasattr(raw_invoke, "content") and isinstance(raw_invoke.content, str):
+                    return self._extract_model_from_text(raw_invoke.content, response_model)
+            except Exception as raw_err:
+                last_error = raw_err
+                logger.warning(f"Raw prompt fallback also failed for {prov_name}: {raw_err}")
+
+            logger.info(f"Failing over from {prov_name} to next candidate LLM provider.")
+
+        raise ValueError(
+            f"All LLM providers ({', '.join(p[0] for p in candidates)}) failed to produce valid output for {response_model.__name__}. Last error: {last_error}"
+        )

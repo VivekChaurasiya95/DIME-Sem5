@@ -68,7 +68,7 @@ export function VerifiedEvidenceInspector({
   };
 
   return (
-    <div className="bg-surface-white rounded-xl border-2 border-primary/40 p-6 shadow-md relative">
+    <div id="sec-inspector" className="bg-surface-white rounded-xl border-2 border-primary/40 p-6 shadow-md relative">
       <div className="flex items-center justify-between pb-3 border-b border-border-default">
         <div className="flex items-center gap-2">
           <CheckCircle2 className="w-5 h-5 text-primary" />
