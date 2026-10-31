@@ -8,8 +8,8 @@ Defines the Pydantic schemas for Multi-Mode Idea Validation:
 - Shared normalization schemas
 """
 
-from typing import Literal, Optional
-from pydantic import BaseModel, Field
+from typing import Literal, Optional, Any
+from pydantic import BaseModel, Field, field_validator
 
 
 class NaturalLanguageIdeaRequest(BaseModel):
@@ -40,6 +40,56 @@ class ExtractedIdeaResponse(BaseModel):
     user_provided_fields: list[str] = Field(default_factory=list, description="Fields explicitly mentioned by the user.")
     inferred_fields: list[str] = Field(default_factory=list, description="Fields inferred by the AI model.")
     unknown_fields: list[str] = Field(default_factory=list, description="Fields that remain unknown.")
+
+    @field_validator(
+        "target_audience",
+        "industry",
+        "business_model",
+        "geographic_market",
+        "problem_statement",
+        "proposed_solution",
+        "description",
+        mode="before",
+    )
+    @classmethod
+    def coerce_to_string(cls, v: Any) -> Any:
+        if v is None:
+            return ""
+        if isinstance(v, list):
+            return ", ".join(str(x) for x in v if x)
+        if isinstance(v, dict):
+            return ", ".join(f"{k}: {val}" for k, val in v.items() if val)
+        return str(v)
+
+    @field_validator(
+        "core_features",
+        "known_competitors",
+        "assumptions",
+        "missing_information",
+        "user_provided_fields",
+        "inferred_fields",
+        "unknown_fields",
+        mode="before",
+    )
+    @classmethod
+    def coerce_to_string_list(cls, v: Any) -> list[str]:
+        if not v:
+            return []
+        if isinstance(v, dict):
+            return [f"{k}: {val}" if val is not None else str(k) for k, val in v.items()]
+        if isinstance(v, str):
+            if "\n" in v:
+                return [line.strip("- *•").strip() for line in v.split("\n") if line.strip()]
+            return [s.strip() for s in v.split(",") if s.strip()]
+        if isinstance(v, (list, tuple, set)):
+            res: list[str] = []
+            for item in v:
+                if isinstance(item, dict):
+                    res.extend([f"{k}: {val}" if val is not None else str(k) for k, val in item.items()])
+                elif item is not None and str(item).strip():
+                    res.append(str(item).strip())
+            return res
+        return []
 
 
 class ImproveIdeaRequest(BaseModel):

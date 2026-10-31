@@ -49,54 +49,78 @@ export async function GET(req: Request) {
       }
     }
 
-    const series1Header = miData?.demandChart?.series1Label || "Primary Solution Inquiries (0-100)";
-    const series2Header = miData?.demandChart?.series2Label || "Customer Friction Mentions (0-100)";
     const ideaTitle = miData?.idea?.title || "Concept";
-
-    const points = miData?.demandChart?.points || [
-      { month: "Oct 25", mockToolSearches: 18, painMentions: 32 },
-      { month: "Nov", mockToolSearches: 24, painMentions: 37 },
-      { month: "Dec", mockToolSearches: 30, painMentions: 42 },
-      { month: "Jan 26", mockToolSearches: 42, painMentions: 50 },
-      { month: "Feb", mockToolSearches: 52, painMentions: 58 },
-      { month: "Mar", mockToolSearches: 62, painMentions: 65 },
-      { month: "Apr", mockToolSearches: 70, painMentions: 72 },
-      { month: "May", mockToolSearches: 77, painMentions: 78 },
-      { month: "Jun", mockToolSearches: 82, painMentions: 84 },
-      { month: "Jul", mockToolSearches: 85, painMentions: 89 },
-      { month: "Aug", mockToolSearches: 87, painMentions: 94 },
-      { month: "Sep 26", mockToolSearches: 88, painMentions: 97 },
-    ];
-
-    const rows: string[][] = [
-      ["Month", series1Header, series2Header, "Velocity Note"],
-      ...points.map((pt: any) => [
-        pt.month,
-        String(pt.mockToolSearches),
-        String(pt.painMentions),
-        `Normalized signal for ${ideaTitle}`,
-      ]),
-    ];
+    const topPapers = miData?.researchLandscape?.topPapers || [];
+    const topRepos = miData?.githubEcosystem?.topRepositories || [];
+    const painPoints = miData?.painPoints || [];
 
     if (format === "json") {
-      const jsonRecords = rows.slice(1).map((r) => ({
-        month: r[0],
-        series1Score: Number(r[1]),
-        series2Score: Number(r[2]),
-        note: r[3],
-      }));
-      return NextResponse.json(jsonRecords);
+      return NextResponse.json({
+        idea: miData?.idea || {},
+        summary: miData?.summary || {},
+        academicPublications: topPapers,
+        openSourceRepositories: topRepos,
+        verifiedFindings: painPoints.map((pp: any) => ({
+          rank: pp.rank,
+          title: pp.title,
+          evidenceCount: pp.evidenceCount,
+          percentage: pp.percentage,
+          claim: pp.evidence?.claim,
+          supportingText: pp.evidence?.supportingText,
+          sourceTitle: pp.evidence?.sourceTitle,
+          sourceUrl: pp.evidence?.sourceUrl,
+          relevanceScore: pp.evidence?.relevanceScore,
+        })),
+      });
+    }
+
+    // Generate clean CSV of verified findings and research
+    const rows: string[][] = [
+      ["Record Type", "Identifier / Title", "Metric / Year / Stars", "Authors / Language", "URL / DOI", "Empirical Excerpt / Takeaway"],
+    ];
+
+    for (const paper of topPapers) {
+      rows.push([
+        "Academic Publication",
+        paper.title || "Untitled Paper",
+        paper.year ? String(paper.year) : "Undated",
+        Array.isArray(paper.authors) ? paper.authors.join("; ") : String(paper.authors || ""),
+        paper.doi ? `DOI: ${paper.doi}` : (paper.url || ""),
+        paper.keyTakeaway || "",
+      ]);
+    }
+
+    for (const repo of topRepos) {
+      rows.push([
+        "Open-Source Repository",
+        repo.name || "Repository",
+        `${repo.stars || 0} stars (${repo.forks || 0} forks)`,
+        repo.language || "Code",
+        repo.url || "",
+        repo.relevance || "",
+      ]);
+    }
+
+    for (const pp of painPoints) {
+      rows.push([
+        "Verified Finding",
+        pp.title || "Problem Signal",
+        `${pp.evidenceCount || 1} supporting sources (${pp.percentage || 0}%)`,
+        pp.evidence?.sourceTitle || "Verified Source",
+        pp.evidence?.sourceUrl || "",
+        pp.evidence?.supportingText || pp.evidence?.claim || "",
+      ]);
     }
 
     const csvContent = rows
-      .map((r) => r.map((c) => `"${c.replace(/"/g, '""')}"`).join(","))
+      .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(","))
       .join("\n");
 
     return new NextResponse(csvContent, {
       status: 200,
       headers: {
         "Content-Type": "text/csv; charset=utf-8",
-        "Content-Disposition": `attachment; filename="dime-market-signals-${(ideaTitle || "data").toLowerCase().replace(/[^a-z0-9]+/g, "-")}.csv"`,
+        "Content-Disposition": `attachment; filename="dime-market-intelligence-${(ideaTitle || "data").toLowerCase().replace(/[^a-z0-9]+/g, "-")}.csv"`,
       },
     });
   } catch (error: unknown) {

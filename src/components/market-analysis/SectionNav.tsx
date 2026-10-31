@@ -3,8 +3,6 @@
 import React, { useState, useEffect } from "react";
 import {
   Activity,
-  DollarSign,
-  Users,
   BookOpen,
   GitBranch,
   ShieldAlert,
@@ -20,15 +18,13 @@ interface SectionItem {
 }
 
 const SECTIONS: SectionItem[] = [
-  { id: "sec-summary", label: "Summary & Demand", icon: Activity },
-  { id: "sec-market-size", label: "TAM / SAM / SOM", icon: DollarSign },
-  { id: "sec-pain-points", label: "Pain Signals", icon: BarChart2 },
-  { id: "sec-competitors", label: "Competitors", icon: Users },
-  { id: "sec-research", label: "Research", icon: BookOpen },
-  { id: "sec-github", label: "GitHub Code", icon: GitBranch },
-  { id: "sec-insights", label: "Insights", icon: Search },
-  { id: "sec-gaps", label: "Gaps & Risks", icon: ShieldAlert },
-  { id: "sec-sources", label: "Coverage", icon: Database },
+  { id: "sec-summary", label: "Summary KPIs", icon: Activity },
+  { id: "sec-research", label: "Academic Research", icon: BookOpen },
+  { id: "sec-github", label: "GitHub Ecosystem", icon: GitBranch },
+  { id: "sec-pain-points", label: "Problem Intelligence", icon: BarChart2 },
+  { id: "sec-inspector", label: "Evidence Inspector", icon: Search },
+  { id: "sec-gaps", label: "Gaps & Hypotheses", icon: ShieldAlert },
+  { id: "sec-sources", label: "Source Coverage", icon: Database },
 ];
 
 export function SectionNav() {

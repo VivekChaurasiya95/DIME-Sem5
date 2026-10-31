@@ -5,13 +5,14 @@ import { useSearchParams } from "next/navigation";
 import type { MarketIntelligencePayload } from "@/types/market-analysis";
 import { MarketHeader } from "@/components/market-analysis/MarketHeader";
 import { AnalysisTabs } from "@/components/market-analysis/AnalysisTabs";
+import { AnalyticalScopeBanner } from "@/components/market-analysis/AnalyticalScopeBanner";
 import { MarketSummaryGrid } from "@/components/market-analysis/MarketSummaryGrid";
-import { DemandSignalsCard } from "@/components/market-analysis/DemandSignalsCard";
-import { QualitativePainSignals } from "@/components/market-analysis/QualitativePainSignals";
-import { PainPointsRanking } from "@/components/market-analysis/PainPointsRanking";
-import { SentimentBreakdown } from "@/components/market-analysis/SentimentBreakdown";
-import { VerifiedEvidenceInspector } from "@/components/market-analysis/VerifiedEvidenceInspector";
-import { StrategicOpportunityCard } from "@/components/market-analysis/StrategicOpportunityCard";
+import { ResearchLandscape } from "@/components/market-analysis/ResearchLandscape";
+import { PublicImplementationEcosystem } from "@/components/market-analysis/PublicImplementationEcosystem";
+import { EvidenceBackedInsights } from "@/components/market-analysis/EvidenceBackedInsights";
+import { ResearchPriorities } from "@/components/market-analysis/ResearchPriorities";
+import { DataCoverageProvenance } from "@/components/market-analysis/DataCoverageProvenance";
+import { exportMarketIntelligenceCsv } from "@/lib/export-market-intelligence-csv";
 import { AlertCircle } from "lucide-react";
 
 function MarketAnalysisContent() {
@@ -23,7 +24,6 @@ function MarketAnalysisContent() {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
-  const [selectedPainPointIndex, setSelectedPainPointIndex] = useState<number>(0);
 
   const fetchMarketData = useCallback(async (isRefresh = false) => {
     if (isRefresh) {
@@ -44,9 +44,9 @@ function MarketAnalysisContent() {
       }
       const json: MarketIntelligencePayload = await res.json();
       setData(json);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error fetching market intelligence:", err);
-      setError(err?.message || "Failed to load market intelligence data");
+      setError(err instanceof Error ? err.message : "Failed to load market intelligence data");
     } finally {
       setLoading(false);
       setIsRefreshing(false);
@@ -58,7 +58,9 @@ function MarketAnalysisContent() {
   }, [fetchMarketData]);
 
   const handleExport = () => {
-    window.location.href = `/api/market-analysis/export?format=csv&ideaId=${encodeURIComponent(ideaId)}`;
+    if (data) {
+      exportMarketIntelligenceCsv(data);
+    }
   };
 
   const handleRefresh = () => {
@@ -91,8 +93,13 @@ function MarketAnalysisContent() {
     );
   }
 
-  const selectedPainPoint =
-    data.painPoints[selectedPainPointIndex] || data.painPoints[0];
+  const scopeBannerData = data.scopeBanner || {
+    scopeText: "Research concentration, open-source codebases, and documented technical limitations.",
+    analyzedDateText: `Analyzed on ${data.idea?.updatedDate || "Oct 28, 2026"}`,
+    persistenceText: "Evidence persisted in PostgreSQL",
+    runIdText: `Run ID: ${(data.idea?.analysisId || analysisId || "").slice(0, 8)}`,
+    analysisId: data.idea?.analysisId || analysisId,
+  };
 
   return (
     <div className="p-8 max-w-[1600px] w-full space-y-6">
@@ -107,42 +114,40 @@ function MarketAnalysisContent() {
       {/* 2. ANALYSIS NAVIGATION TABS */}
       <AnalysisTabs tabs={data.tabs} ideaId={data.idea.id} />
 
-      {/* 3. TOP SUMMARY ROW: 4 KEY DEMAND & EVIDENCE METRIC CARDS */}
+      {/* 3. ANALYTICAL SCOPE BANNER */}
+      <AnalyticalScopeBanner
+        data={scopeBannerData}
+        onRefresh={handleRefresh}
+        isRefreshing={isRefreshing}
+        onExportCsv={handleExport}
+      />
+
+      {/* 4. EVIDENCE COVERAGE & RESEARCH SNAPSHOT (5 KPI CARDS) */}
       <MarketSummaryGrid summary={data.summary} />
 
-      {/* 4. MAIN LAYOUT GRID (65% Left Column, 35% Right Column) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* LEFT COLUMN (8 columns in 12-col grid) */}
-        <div className="lg:col-span-8 flex flex-col gap-6 min-w-0">
-          {/* Card 1: Demand Signals Chart */}
-          <DemandSignalsCard data={data.demandChart} />
-
-          {/* Card 2: Qualitative Pain Signals */}
-          <QualitativePainSignals signals={data.qualitativeSignals} />
-
-          {/* Card 3: Top Pain Points by Citation Volume */}
-          <PainPointsRanking
-            items={data.painPoints}
-            selectedIndex={selectedPainPointIndex}
-            onSelect={(idx) => setSelectedPainPointIndex(idx)}
-          />
+      {/* 5. RESEARCH LANDSCAPE & PUBLIC IMPLEMENTATION ECOSYSTEM (SIDE BY SIDE) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+        <div className="lg:col-span-8 h-full">
+          <ResearchLandscape data={data.researchLandscape} />
         </div>
-
-        {/* RIGHT COLUMN (4 columns in 12-col grid) */}
-        <div className="lg:col-span-4 flex flex-col gap-6 min-w-0">
-          {/* Card 1: Sentiment Breakdown */}
-          <SentimentBreakdown data={data.sentiment} />
-
-          {/* Card 2: Verified Evidence Inspector */}
-          <VerifiedEvidenceInspector
-            item={selectedPainPoint}
-            ideaId={data.idea.id}
-          />
-
-          {/* Card 3: Strategic Opportunity Callout */}
-          <StrategicOpportunityCard opportunity={data.strategicOpportunity} />
+        <div className="lg:col-span-4 h-full">
+          <PublicImplementationEcosystem data={data.githubEcosystem} />
         </div>
       </div>
+
+      {/* 6. EVIDENCE-BACKED INSIGHTS (FULL WIDTH) */}
+      <EvidenceBackedInsights
+        data={data.evidenceBackedInsights}
+        ideaTitle={data.idea?.title}
+      />
+
+      {/* 7. RESEARCH PRIORITIES & UNADDRESSED QUESTIONS (FULL WIDTH) */}
+      {data.researchPriorities && (
+        <ResearchPriorities data={data.researchPriorities} />
+      )}
+
+      {/* 8. DATA COVERAGE & SOURCE PROVENANCE (COLLAPSIBLE FULL WIDTH) */}
+      <DataCoverageProvenance data={data.sourceCoverage} />
     </div>
   );
 }

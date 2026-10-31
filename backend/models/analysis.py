@@ -44,8 +44,8 @@ class Analysis(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     # ── Idea snapshot (denormalized for independence) ─────────
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
-    domain: Mapped[str | None] = mapped_column(String(200))
-    target_audience: Mapped[str | None] = mapped_column(String(200))
+    domain: Mapped[str | None] = mapped_column(Text)
+    target_audience: Mapped[str | None] = mapped_column(Text)
 
     # ── Status ────────────────────────────────────────────────
     status: Mapped[str] = mapped_column(

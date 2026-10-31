@@ -18,6 +18,8 @@ interface CompetitorLandscapeProps {
 }
 
 export function CompetitorLandscape({ data }: CompetitorLandscapeProps) {
+  const [filterType, setFilterType] = useState<string>("all");
+
   if (!data) return null;
 
   const {
@@ -28,8 +30,6 @@ export function CompetitorLandscape({ data }: CompetitorLandscapeProps) {
     marketConcentration,
     differentiationAngle,
   } = data;
-
-  const [filterType, setFilterType] = useState<string>("all");
 
   const filteredCompetitors =
     filterType === "all"
