@@ -26,12 +26,27 @@ export interface DescribeDraftState {
   businessModel: string;
   knownCompetitors: string;
   assumptions: string;
+  budget?: string;
+  teamSize?: string;
+  timeline?: string;
+  preferredTechnologies?: string;
 }
 
 interface DescribeIdeaViewProps {
   draft: DescribeDraftState;
   onUpdateDraft: (updates: Partial<DescribeDraftState>) => void;
-  onSaveDraftToDb: (data: { title: string; description: string; targetAudience: string; industry: string }) => Promise<void>;
+  onSaveDraftToDb: (data: {
+    title: string;
+    description: string;
+    targetAudience: string;
+    industry: string;
+    formFactors?: string[];
+    budget?: string;
+    teamSize?: string;
+    timeline?: string;
+    preferredTechnologies?: string[] | string;
+    analysisDepth?: string;
+  }) => Promise<void>;
   isSavingDraft: boolean;
 }
 
@@ -165,6 +180,10 @@ export function DescribeIdeaView({
           business_model: draft.businessModel || null,
           known_competitors: draft.knownCompetitors || null,
           assumptions: draft.assumptions || null,
+          budget: draft.budget || null,
+          team_size: draft.teamSize || null,
+          timeline: draft.timeline || null,
+          preferred_technologies: draft.preferredTechnologies || null,
         }),
       });
 
@@ -217,6 +236,12 @@ export function DescribeIdeaView({
         analysisDepth: "STANDARD",
         inputMode: "natural_language",
         rawIdea: draft.rawDescription,
+        budget: draft.budget || payloadData.budget || undefined,
+        teamSize: draft.teamSize || payloadData.team_size || undefined,
+        timeline: draft.timeline || payloadData.timeline || undefined,
+        preferredTechnologies: draft.preferredTechnologies 
+          ? draft.preferredTechnologies.split(",").map(t => t.trim()).filter(Boolean)
+          : (payloadData.preferred_technologies || undefined),
       };
 
       const res = await fetch("/api/ideas/start-analysis", {
@@ -266,6 +291,10 @@ export function DescribeIdeaView({
       description: draft.rawDescription,
       targetAudience: draft.targetAudience || "General",
       industry: draft.industry || "General",
+      budget: draft.budget,
+      teamSize: draft.teamSize,
+      timeline: draft.timeline,
+      preferredTechnologies: draft.preferredTechnologies,
     });
   };
 
@@ -436,6 +465,59 @@ export function DescribeIdeaView({
                   value={draft.knownCompetitors}
                   onChange={(e) => onUpdateDraft({ knownCompetitors: e.target.value })}
                   placeholder="e.g. LeetCode, Pramp, Interviewing.io"
+                  className="w-full h-10 px-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-[13px] text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-dime-orange"
+                />
+              </div>
+
+              {/* Feasibility Context (Optional) */}
+              <div className="space-y-1.5">
+                <label className="text-[12px] font-semibold text-slate-700 dark:text-slate-300">
+                  Team Composition / Roles (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={draft.teamSize || ""}
+                  onChange={(e) => onUpdateDraft({ teamSize: e.target.value })}
+                  placeholder="e.g. Solo founder, 2 engineers, 1 ML researcher"
+                  className="w-full h-10 px-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-[13px] text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-dime-orange"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[12px] font-semibold text-slate-700 dark:text-slate-300">
+                  Available Budget (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={draft.budget || ""}
+                  onChange={(e) => onUpdateDraft({ budget: e.target.value })}
+                  placeholder="e.g. $5,000, Bootstrapped, <$10k"
+                  className="w-full h-10 px-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-[13px] text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-dime-orange"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[12px] font-semibold text-slate-700 dark:text-slate-300">
+                  Target MVP Timeline (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={draft.timeline || ""}
+                  onChange={(e) => onUpdateDraft({ timeline: e.target.value })}
+                  placeholder="e.g. 3 months, 6 weeks, Q3 2026"
+                  className="w-full h-10 px-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-[13px] text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-dime-orange"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[12px] font-semibold text-slate-700 dark:text-slate-300">
+                  Preferred Technologies / Constraints (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={draft.preferredTechnologies || ""}
+                  onChange={(e) => onUpdateDraft({ preferredTechnologies: e.target.value })}
+                  placeholder="e.g. Next.js, FastAPI, PostgreSQL, PyTorch"
                   className="w-full h-10 px-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-[13px] text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-dime-orange"
                 />
               </div>

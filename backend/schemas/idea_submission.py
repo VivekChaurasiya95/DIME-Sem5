@@ -21,6 +21,10 @@ class NaturalLanguageIdeaRequest(BaseModel):
     business_model: Optional[str] = Field(None, max_length=300, description="Optional expected monetization/business model.")
     known_competitors: Optional[str] = Field(None, max_length=500, description="Optional known competitors.")
     assumptions: Optional[str] = Field(None, max_length=1000, description="Optional hypotheses or assumptions.")
+    budget: Optional[str] = Field(None, max_length=200, description="Optional available budget or budget range.")
+    team_size: Optional[str] = Field(None, max_length=200, description="Optional team size or composition.")
+    timeline: Optional[str] = Field(None, max_length=200, description="Optional MVP target timeline.")
+    preferred_technologies: Optional[Any] = Field(None, description="Optional preferred tech stack or constraints.")
 
 
 class ExtractedIdeaResponse(BaseModel):
@@ -40,21 +44,41 @@ class ExtractedIdeaResponse(BaseModel):
     user_provided_fields: list[str] = Field(default_factory=list, description="Fields explicitly mentioned by the user.")
     inferred_fields: list[str] = Field(default_factory=list, description="Fields inferred by the AI model.")
     unknown_fields: list[str] = Field(default_factory=list, description="Fields that remain unknown.")
+    budget: Optional[str] = Field(None, description="Extracted or user-specified budget.")
+    team_size: Optional[str] = Field(None, description="Extracted or user-specified team size/composition.")
+    timeline: Optional[str] = Field(None, description="Extracted or user-specified timeline.")
+    preferred_technologies: list[str] = Field(default_factory=list, description="Extracted or user-specified tech stack.")
 
     @field_validator(
         "target_audience",
         "industry",
-        "business_model",
-        "geographic_market",
         "problem_statement",
         "proposed_solution",
         "description",
         mode="before",
     )
     @classmethod
-    def coerce_to_string(cls, v: Any) -> Any:
+    def coerce_required_to_string(cls, v: Any) -> Any:
         if v is None:
             return ""
+        if isinstance(v, list):
+            return ", ".join(str(x) for x in v if x)
+        if isinstance(v, dict):
+            return ", ".join(f"{k}: {val}" for k, val in v.items() if val)
+        return str(v)
+
+    @field_validator(
+        "business_model",
+        "geographic_market",
+        "budget",
+        "team_size",
+        "timeline",
+        mode="before",
+    )
+    @classmethod
+    def coerce_optional_to_string(cls, v: Any) -> Any:
+        if v is None:
+            return None
         if isinstance(v, list):
             return ", ".join(str(x) for x in v if x)
         if isinstance(v, dict):
@@ -69,6 +93,7 @@ class ExtractedIdeaResponse(BaseModel):
         "user_provided_fields",
         "inferred_fields",
         "unknown_fields",
+        "preferred_technologies",
         mode="before",
     )
     @classmethod

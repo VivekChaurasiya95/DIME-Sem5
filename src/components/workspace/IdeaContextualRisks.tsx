@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import type { ReportData } from "@/components/analysis/ReportViewer";
 import type { EvidenceItem } from "@/components/analysis/EvidenceExplorer";
 import { 
@@ -11,11 +11,21 @@ import {
   ArrowRight,
   Shield,
   Layers,
-  Lock,
   Compass,
-  Check,
-  TrendingDown,
-  Info
+  Info,
+  ExternalLink,
+  ChevronDown,
+  ChevronUp,
+  X,
+  FileText,
+  Search,
+  BookOpen,
+  GitBranch,
+  Target,
+  Database,
+  Calculator,
+  Flame,
+  CheckCircle
 } from "lucide-react";
 import type { WorkspaceTabId } from "./IdeaWorkspaceTabs";
 
@@ -36,332 +46,649 @@ export function IdeaContextualRisks({
   evidence,
   onSwitchTab,
 }: IdeaContextualRisksProps) {
-  // 1. Genuine Risk Score & Telemetry from Backend
-  const riskObj = report?.scores?.["Risk Indicator"];
-  const riskScore = riskObj?.score ?? 42;
-  const riskConfidence = riskObj?.confidence ?? 65;
-  const vulnerabilityScore = riskObj?.vulnerability_score ?? Math.round(riskScore);
+  // State for Evidence Inspection Drawer
+  const [selectedRiskEvidence, setSelectedRiskEvidence] = useState<{
+    riskTitle: string;
+    items: EvidenceItem[];
+  } | null>(null);
 
-  // 2. Real Risk Findings from Ingested Pipeline
+  // State for Formula Transparency Card
+  const [showFormulaDetails, setShowFormulaDetails] = useState<boolean>(false);
+
+  // 1. Genuine Risk Score & Pipeline Telemetry
+  const riskObj = report?.scores?.["Risk Indicator"] || report?.scores?.["Risk"];
+  const hasRiskScore = typeof riskObj?.score === "number";
+  const riskScore = typeof riskObj?.score === "number" ? Math.round(riskObj.score) : null;
+  const riskConfidence = riskObj?.confidence !== undefined && riskObj?.confidence !== null 
+    ? (riskObj.confidence > 1.0 ? Math.round(riskObj.confidence) : Math.round(riskObj.confidence * 100))
+    : null;
+
+  // Extract component scores feeding into the Risk Formula
+  const satObj = report?.scores?.["Market Saturation"] || report?.scores?.["Saturation"];
+  const satScore = typeof satObj?.score === "number" ? Math.round(satObj.score) : null;
+
+  const feasObj = report?.scores?.["Technical Feasibility"] || report?.scores?.["Feasibility"];
+  const feasScore = typeof feasObj?.score === "number" ? Math.round(feasObj.score) : null;
+
+  const novObj = report?.scores?.["Novelty Score"] || report?.scores?.["Novelty"];
+  const novScore = typeof novObj?.score === "number" ? Math.round(novObj.score) : null;
+
+  // 2. Real Risk & Uncertainty Findings from Ingested Pipeline
   const realRiskFindings = useMemo(() => {
-    return report?.findings?.filter((f) => f.category === "risk") || [];
+    if (!report?.findings) return [];
+    return report.findings.filter(
+      (f) => f.category === "risk" || f.category === "uncertainty"
+    );
   }, [report?.findings]);
 
-  // 3. Domain Contextual Analysis
-  const domainText = `${title} ${report?.description || ""} ${report?.domain || ""}`.toLowerCase();
+  // 3. Evidence Corpus Breakdown for Gap Analysis
+  const corpusStats = useMemo(() => {
+    let papers = 0;
+    let repos = 0;
+    let other = 0;
+    evidence.forEach((ev) => {
+      const type = ((ev as any).source_type || ev.evidence_type || "").toLowerCase();
+      const url = (ev.source_url || (ev as any).url || "").toLowerCase();
+      if (type.includes("scholar") || type.includes("crossref") || type.includes("paper") || url.includes("doi.org") || url.includes("arxiv.org")) {
+        papers++;
+      } else if (type.includes("github") || url.includes("github.com")) {
+        repos++;
+      } else {
+        other++;
+      }
+    });
+    return {
+      total: evidence.length,
+      papers,
+      repos,
+      other,
+    };
+  }, [evidence]);
 
-  // 4. Synthesize Dynamic Categorized Risks
-  const categorizedRisks = useMemo(() => {
-    if (realRiskFindings.length > 0) {
-      return realRiskFindings.map((rf, idx) => {
-        const conf = rf.confidence || 0.65;
-        const isHigh = conf >= 0.75 || rf.evidence_count >= 8;
+  // 4. Actionable Prioritized De-risking Milestones from Ingested Data
+  // Safely normalizes both MVPFocusItem objects and primitive strings
+  const prioritizedMilestones = useMemo(() => {
+    const mvpItems = report?.mvp_focus || [];
+    const gaps = report?.strategic_gaps || [];
+
+    const milestones: Array<{
+      priority: "P0" | "P1" | "P2";
+      stageLabel: string;
+      title: string;
+      description: string;
+      timeline?: string;
+      sourceCategory: string;
+    }> = [];
+
+    // Safe extraction helper to guarantee renderable string primitives
+    const parseMvpItem = (
+      item: any,
+      fallbackPriority: "P0" | "P1" | "P2",
+      defaultTitle: string,
+      stageLabel: string
+    ) => {
+      if (!item) return null;
+      if (typeof item === "string") {
         return {
-          id: `risk-${idx + 1}`,
-          category: idx % 3 === 0 ? "Market / Incumbent Threat" : idx % 3 === 1 ? "Technical & Integration Risk" : "Regulatory & Data Governance",
-          title: rf.title,
-          severity: isHigh ? "High" : "Moderate",
-          severityColor: isHigh 
-            ? "text-rose-700 bg-rose-50 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800/40" 
-            : "text-amber-700 bg-amber-50 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800/40",
-          description: rf.description,
-          evidenceBacked: true,
-          evidenceCount: rf.evidence_count,
-          mitigation: `Prioritize architectural moats, zero-retention privacy protocols, and specialized domain workflows to prevent incumbent replication.`,
+          priority: fallbackPriority,
+          stageLabel,
+          title: defaultTitle,
+          description: item,
+          sourceCategory: "Synthesis MVP Directive",
         };
-      });
+      }
+      if (typeof item === "object") {
+        const prio = (item.priority === "P0" || item.priority === "P1" || item.priority === "P2")
+          ? item.priority
+          : fallbackPriority;
+        return {
+          priority: prio as "P0" | "P1" | "P2",
+          stageLabel: `${prio} Priority: ${item.timeline ? item.timeline : "Direct Action"}`,
+          title: typeof item.title === "string" ? item.title : defaultTitle,
+          description: typeof item.description === "string" 
+            ? item.description 
+            : typeof item.title === "string" 
+            ? item.title 
+            : "",
+          timeline: typeof item.timeline === "string" ? item.timeline : undefined,
+          sourceCategory: "Synthesis MVP Directive",
+        };
+      }
+      return null;
+    };
+
+    const parseGapItem = (
+      item: any,
+      fallbackPriority: "P0" | "P1" | "P2",
+      defaultTitle: string,
+      stageLabel: string
+    ) => {
+      if (!item) return null;
+      if (typeof item === "string") {
+        return {
+          priority: fallbackPriority,
+          stageLabel,
+          title: defaultTitle,
+          description: item,
+          sourceCategory: "Strategic Gap Analysis",
+        };
+      }
+      if (typeof item === "object") {
+        return {
+          priority: fallbackPriority,
+          stageLabel,
+          title: typeof item.title === "string" ? item.title : defaultTitle,
+          description: typeof item.gap === "string"
+            ? item.gap
+            : typeof item.opportunity === "string"
+            ? item.opportunity
+            : typeof item.why_it_matters === "string"
+            ? item.why_it_matters
+            : typeof item.title === "string"
+            ? item.title
+            : "",
+          sourceCategory: "Strategic Gap Analysis",
+        };
+      }
+      return null;
+    };
+
+    if (mvpItems.length > 0) {
+      const parsed = parseMvpItem(
+        mvpItems[0],
+        "P0",
+        "Immediate Architectural & Technical Validation",
+        "P0 Priority: Core De-risking"
+      );
+      if (parsed) milestones.push(parsed);
     }
 
-    // Dynamic domain-specific synthesis when specific findings need structured grouping
-    if (domainText.includes("dental") || domainText.includes("health") || domainText.includes("clinic") || domainText.includes("hipaa")) {
-      return [
-        {
-          id: "risk-health-1",
-          category: "Regulatory & Compliance Risk",
-          title: "HIPAA / BAA Operatory Compliance & Audio PHI Leakage",
-          severity: "High",
-          severityColor: "text-rose-700 bg-rose-50 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800/40",
-          description: "Ambient dental operatory speech recording risks capturing unauthorized patient identifiers or cross-talk between treatment rooms.",
-          evidenceBacked: true,
-          evidenceCount: 6,
-          mitigation: "Deploy client-side zero-retention buffering and on-device whisper acoustic filtering with signed Business Associate Agreements (BAAs).",
-        },
-        {
-          id: "risk-health-2",
-          category: "Technical / Integration Friction",
-          title: "EHR / Dentrix Proprietary Protocol Lock-in",
-          severity: "High",
-          severityColor: "text-rose-700 bg-rose-50 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800/40",
-          description: "Legacy on-premise practice management software (Dentrix, Eaglesoft) uses closed proprietary database drivers with restrictive third-party access.",
-          evidenceBacked: true,
-          evidenceCount: 8,
-          mitigation: "Support lightweight local desktop bridge agent communicating via standard HL7/FHIR micro-connectors rather than direct SQL injection.",
-        },
-        {
-          id: "risk-health-3",
-          category: "Clinical Adoption Inertia",
-          title: "Acoustic Background Noise & Clinical Mask Occlusion",
-          severity: "Moderate",
-          severityColor: "text-amber-700 bg-amber-50 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800/40",
-          description: "High-speed dental handpieces and ultrasonic scalers generate ultrasonic high-frequency acoustic noise that can degrade speech recognition accuracy.",
-          evidenceBacked: true,
-          evidenceCount: 5,
-          mitigation: "Utilize directional noise-cancelling microphone arrays and fine-tuned dental terminology acoustic models.",
-        },
-      ];
-    } else if (domainText.includes("code") || domainText.includes("ast") || domainText.includes("developer")) {
-      return [
-        {
-          id: "risk-code-1",
-          category: "Market / Platform Risk",
-          title: "GitHub Copilot / GitLab Native Feature Bundling",
-          severity: "High",
-          severityColor: "text-rose-700 bg-rose-50 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800/40",
-          description: "Monolithic code hosting platforms possess native distribution and can integrate baseline LLM PR summaries directly into their user interfaces.",
-          evidenceBacked: true,
-          evidenceCount: 9,
-          mitigation: "Differentiate sharply on deterministic AST multi-file regression analysis and distributed service contract tracing that generic chat bots cannot verify.",
-        },
-        {
-          id: "risk-code-2",
-          category: "Security & Source Code Privacy",
-          title: "Enterprise IP & Proprietary Source Code Exfiltration",
-          severity: "High",
-          severityColor: "text-rose-700 bg-rose-50 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800/40",
-          description: "Enterprise security teams reject tools that send proprietary repositories to third-party multi-tenant LLM endpoints without zero-data-retention guarantees.",
-          evidenceBacked: true,
-          evidenceCount: 7,
-          mitigation: "Implement single-tenant VPC deployments, self-hosted LLM runtime options, and verifiable cryptographic memory destruction upon PR close.",
-        },
-        {
-          id: "risk-code-3",
-          category: "Execution / Developer Trust",
-          title: "Review Fatigue & Hallucinated Linting Noise",
-          severity: "Moderate",
-          severityColor: "text-amber-700 bg-amber-50 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800/40",
-          description: "If the AI produces false-positive style nitpicks, developers disable automated comment bots within 14 days of installation.",
-          evidenceBacked: true,
-          evidenceCount: 5,
-          mitigation: "Enforce a strict confidence threshold (&gt;90%) and suppress non-critical stylistic comments unless paired with a compiler-verifiable AST proof.",
-        },
-      ];
-    } else {
-      // General Domain-Aware Risk Assessment
-      return [
-        {
-          id: "risk-gen-1",
-          category: "Market / Incumbent Threat",
-          title: "Incumbent Distribution Dominance & Feature Replication",
-          severity: "Moderate",
-          severityColor: "text-amber-700 bg-amber-50 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800/40",
-          description: "Established industry solutions possess existing enterprise contracts. If this core value proposition can be easily copied, switching barriers remain significant.",
-          evidenceBacked: true,
-          evidenceCount: 6,
-          mitigation: "Focus on a defensible niche vertical where incumbents cannot afford to specialize, building superior domain integrations and workflow speed.",
-        },
-        {
-          id: "risk-gen-2",
-          category: "Technical / Execution Risk",
-          title: "Integration Complexity & Data Migration Inertia",
-          severity: "Moderate",
-          severityColor: "text-amber-700 bg-amber-50 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800/40",
-          description: "Prospective users rely on legacy data formats and existing operational toolchains. Complex onboarding procedures increase drop-off during trial phases.",
-          evidenceBacked: true,
-          evidenceCount: 5,
-          mitigation: "Provide 1-click import utilities, backwards-compatible schema mappers, and friction-free webhook integrations.",
-        },
-        {
-          id: "risk-gen-3",
-          category: "Governance & Trust",
-          title: "Data Sovereignty & User Privacy Guarantees",
-          severity: "Moderate",
-          severityColor: "text-amber-700 bg-amber-50 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800/40",
-          description: "Commercial clients require strict governance over how their proprietary operational data is stored, processed, and secured.",
-          evidenceBacked: true,
-          evidenceCount: 4,
-          mitigation: "Enforce end-to-end data encryption, granular role-based access control (RBAC), and verifiable audit logging.",
-        },
-      ];
+    if (mvpItems.length > 1) {
+      const parsed = parseMvpItem(
+        mvpItems[1],
+        "P1",
+        "Differentiated Workflow & Defensibility Bridge",
+        "P1 Priority: Workflow Integration"
+      );
+      if (parsed) milestones.push(parsed);
+    } else if (gaps.length > 0) {
+      const parsed = parseGapItem(
+        gaps[0],
+        "P1",
+        "Exploiting Identified Strategic Moats",
+        "P1 Priority: White Space Capture"
+      );
+      if (parsed) milestones.push(parsed);
     }
-  }, [realRiskFindings, domainText]);
 
-  // Decision Framework Assessment
-  const decisionAssessment = useMemo(() => {
-    if (riskScore <= 40) {
-      return {
-        decision: "PROCEED WITH GUARDRAILS (Green Light)",
-        badgeBg: "bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800/40",
-        message: "Threat vectors are well-understood with viable mitigation architectures. Competitive defensibility can be established through targeted domain specialization.",
-      };
-    } else if (riskScore <= 60) {
-      return {
-        decision: "PROCEED WITH TARGETED MITIGATIONS (Yellow Light)",
-        badgeBg: "bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800/40",
-        message: "Elevated incumbent or technical integration friction detected. Phase 1 engineering must prioritize defensible data pipelines and compliance before broad customer outreach.",
-      };
-    } else {
-      return {
-        decision: "DEEP PILOT VALIDATION REQUIRED (Amber Alert)",
-        badgeBg: "bg-rose-50 text-rose-800 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800/40",
-        message: "Significant compliance, integration, or competitive threats require explicit customer co-development agreements before committing capital.",
-      };
+    if (mvpItems.length > 2) {
+      const parsed = parseMvpItem(
+        mvpItems[2],
+        "P2",
+        "Scaling & Ecosystem Expansion",
+        "P2 Priority: Operational Scaling"
+      );
+      if (parsed) milestones.push(parsed);
+    } else if (gaps.length > 1) {
+      const parsed = parseGapItem(
+        gaps[1],
+        "P2",
+        "Locking In Identified Architecture Advantages",
+        "P2 Priority: Long-Term Defensibility"
+      );
+      if (parsed) milestones.push(parsed);
     }
-  }, [riskScore]);
+
+    return milestones;
+  }, [report?.mvp_focus, report?.strategic_gaps]);
+
+  // Handler to inspect citations for a finding
+  const handleOpenEvidence = (findingTitle: string, findingDesc: string) => {
+    const searchTerms = `${findingTitle} ${findingDesc}`.toLowerCase().split(/\s+/).filter(w => w.length > 4);
+    
+    // Find matching evidence items or default to top relevant items
+    const matched = evidence.filter(ev => {
+      const text = `${ev.source_title || ""} ${ev.claim || ""} ${ev.supporting_text || ""}`.toLowerCase();
+      return searchTerms.some(term => text.includes(term));
+    });
+
+    const displayItems = matched.length > 0 ? matched.slice(0, 8) : evidence.slice(0, 5);
+
+    setSelectedRiskEvidence({
+      riskTitle: findingTitle,
+      items: displayItems,
+    });
+  };
 
   return (
     <div className="space-y-8 pt-2 pb-16">
       {/* Header Banner */}
       <div className="p-6 rounded-2xl bg-surface-white border border-border-default shadow-sm space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
+          <div className="space-y-1">
             <div className="flex items-center gap-2">
               <ShieldAlert className="w-5 h-5 text-rose-600" />
               <h2 className="text-xl font-bold text-text-strong">Risks, Evidence Gaps & Mitigations</h2>
             </div>
-            <p className="text-xs sm:text-sm text-text-secondary mt-1">
-              Objective threat vectors, compliance boundaries, and recommended mitigations for <span className="font-semibold text-text-strong">{title}</span>.
+            <p className="text-xs sm:text-sm text-text-secondary">
+              Deterministic threat modeling, known evidence voids, and verified de-risking priorities for{" "}
+              <span className="font-semibold text-text-strong">{title}</span>.
             </p>
           </div>
 
-          <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 dark:bg-rose-950/40 dark:border-rose-800/40 text-center sm:text-right shrink-0">
-            <div className="text-[10px] font-bold text-rose-800 dark:text-rose-300 uppercase">Composite Risk Index</div>
-            <div className="text-2xl font-bold text-rose-700 dark:text-rose-300">{Math.round(riskScore)} <span className="text-sm font-semibold text-rose-600">/ 100</span></div>
-            <div className="text-[11px] text-rose-600 dark:text-rose-400 font-semibold">
-              {riskScore >= 60 ? "Elevated Threat Vector" : "Moderate Moat Risk"}
+          {/* Genuine Score Container */}
+          <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800 text-center sm:text-right shrink-0">
+            <div className="text-[10px] font-bold text-text-muted uppercase tracking-wider">
+              Composite Risk Index
             </div>
+            {hasRiskScore ? (
+              <>
+                <div className="text-2xl font-bold text-text-strong">
+                  {riskScore} <span className="text-xs font-semibold text-text-muted">/ 100</span>
+                </div>
+                <div className="text-[11px] text-text-secondary font-medium">
+                  {riskConfidence !== null ? `${riskConfidence}% Model Confidence` : "Verified Synthesis"}
+                </div>
+              </>
+            ) : (
+              <div className="text-xs font-semibold text-amber-600 dark:text-amber-400 py-1">
+                Score Pending Synthesis
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Strategic Decision Recommendation */}
-        <div className={`p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${decisionAssessment.badgeBg}`}>
-          <div className="space-y-0.5">
-            <div className="text-xs font-bold uppercase tracking-wider">
-              DIME Strategic Decision Framework: {decisionAssessment.decision}
+        {/* Formula Transparency Explainer Bar */}
+        <div className="p-4 rounded-xl bg-slate-50/80 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-800/60 space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Calculator className="w-4 h-4 text-primary" />
+              <span className="text-xs font-bold text-text-strong uppercase tracking-wider">
+                Risk Metric Lineage & Deterministic Calculation
+              </span>
             </div>
-            <p className="text-xs leading-relaxed opacity-90">
-              {decisionAssessment.message}
-            </p>
-          </div>
-
-          {onSwitchTab && (
             <button
               type="button"
-              onClick={() => onSwitchTab("evidence")}
-              className="text-xs font-semibold underline flex items-center gap-1 shrink-0 cursor-pointer self-start sm:self-auto"
+              onClick={() => setShowFormulaDetails(!showFormulaDetails)}
+              className="text-xs text-primary font-semibold hover:underline flex items-center gap-1 cursor-pointer self-start sm:self-auto"
             >
-              <span>Verify Evidence</span>
-              <ArrowRight className="w-3.5 h-3.5" />
+              <span>{showFormulaDetails ? "Hide Formula" : "Inspect Formula & Inputs"}</span>
+              {showFormulaDetails ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
             </button>
+          </div>
+
+          <p className="text-xs text-text-secondary leading-relaxed">
+            DIME derives the Composite Risk Index deterministically from three peer pipeline scores:
+            <span className="font-mono font-semibold text-text-strong ml-1">
+              (Saturation × 0.30) + ((100 - Feasibility) × 0.40) + ((100 - Novelty) × 0.30)
+            </span>.
+            Lower scores reflect defensible novelty with demonstrated technical feasibility; higher scores indicate incumbent saturation or high implementation barriers.
+          </p>
+
+          {showFormulaDetails && (
+            <div className="pt-3 border-t border-slate-200 dark:border-slate-800 grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="p-3 rounded-lg bg-surface-white border border-slate-200 dark:border-slate-800 space-y-1">
+                <div className="text-[10px] font-bold text-text-muted uppercase">1. Market Saturation (Weight: 30%)</div>
+                <div className="text-sm font-bold text-text-strong">
+                  {satScore !== null ? `${satScore} / 100` : "Not Available"}
+                </div>
+                <p className="text-[11px] text-text-muted">
+                  Measures density of commercial and open-source competitors identified.
+                </p>
+              </div>
+
+              <div className="p-3 rounded-lg bg-surface-white border border-slate-200 dark:border-slate-800 space-y-1">
+                <div className="text-[10px] font-bold text-text-muted uppercase">2. Inverted Feasibility (Weight: 40%)</div>
+                <div className="text-sm font-bold text-text-strong">
+                  {feasScore !== null ? `${100 - feasScore} / 100 (100 - ${feasScore})` : "Not Available"}
+                </div>
+                <p className="text-[11px] text-text-muted">
+                  Higher technical friction increases the composite execution threat.
+                </p>
+              </div>
+
+              <div className="p-3 rounded-lg bg-surface-white border border-slate-200 dark:border-slate-800 space-y-1">
+                <div className="text-[10px] font-bold text-text-muted uppercase">3. Inverted Novelty (Weight: 30%)</div>
+                <div className="text-sm font-bold text-text-strong">
+                  {novScore !== null ? `${100 - novScore} / 100 (100 - ${novScore})` : "Not Available"}
+                </div>
+                <p className="text-[11px] text-text-muted">
+                  Lower conceptual novelty exposes the idea to rapid incumbent replication.
+                </p>
+              </div>
+            </div>
           )}
         </div>
       </div>
 
-      {/* Primary Risk Vectors & Mitigations */}
+      {/* Primary Categorized Risk & Uncertainty Findings */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h3 className="text-base font-bold text-text-strong flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-rose-600" />
-            <span>Categorized Threat Vectors & Defensible Mitigations</span>
-          </h3>
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-5 h-5 text-amber-600" />
+            <h3 className="text-base font-bold text-text-strong">
+              Pipeline Identified Threat Vectors & Uncertainties
+            </h3>
+          </div>
           <span className="text-xs text-text-muted font-medium">
-            {categorizedRisks.length} Threat Vectors Analyzed
+            {realRiskFindings.length} Verified Finding{realRiskFindings.length === 1 ? "" : "s"}
           </span>
         </div>
 
-        <div className="grid grid-cols-1 gap-4">
-          {categorizedRisks.map((risk) => (
-            <div 
-              key={risk.id}
-              className="p-5 rounded-2xl bg-surface-white border border-border-default shadow-sm space-y-4 hover:border-slate-300 transition-colors"
-            >
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div className="flex items-center gap-2.5">
-                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${risk.severityColor}`}>
-                    {risk.severity} Severity
-                  </span>
-                  <span className="text-xs font-semibold text-text-muted uppercase tracking-wider">
-                    {risk.category}
-                  </span>
+        {realRiskFindings.length > 0 ? (
+          <div className="grid grid-cols-1 gap-4">
+            {realRiskFindings.map((finding, idx) => {
+              const confPct = finding.confidence !== undefined && finding.confidence !== null
+                ? (finding.confidence > 1.0 ? Math.round(finding.confidence) : Math.round(finding.confidence * 100))
+                : null;
+
+              // Intelligent risk taxonomy classification based on title and description
+              const textContent = `${finding.title || ""} ${finding.description || ""}`.toLowerCase();
+              let badgeLabel = "Operational Threat";
+              let badgeColor = "text-amber-700 bg-amber-50 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800/40";
+
+              if (textContent.includes("regulatory") || textContent.includes("compliance") || textContent.includes("hipaa") || textContent.includes("fda") || textContent.includes("gdpr") || textContent.includes("legal")) {
+                badgeLabel = "Regulatory & Compliance";
+                badgeColor = "text-purple-700 bg-purple-50 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800/40";
+              } else if (textContent.includes("security") || textContent.includes("privacy") || textContent.includes("breach") || textContent.includes("authentication") || textContent.includes("vulnerability")) {
+                badgeLabel = "Security & Privacy";
+                badgeColor = "text-rose-700 bg-rose-50 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800/40";
+              } else if (textContent.includes("technical") || textContent.includes("integration") || textContent.includes("interoperability") || textContent.includes("ehr") || textContent.includes("api") || textContent.includes("latency")) {
+                badgeLabel = "Technical & Integration";
+                badgeColor = "text-indigo-700 bg-indigo-50 border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-800/40";
+              } else if (textContent.includes("financial") || textContent.includes("cost") || textContent.includes("roi") || textContent.includes("tco") || textContent.includes("budget") || textContent.includes("pricing")) {
+                badgeLabel = "Financial Viability";
+                badgeColor = "text-emerald-700 bg-emerald-50 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800/40";
+              } else if (finding.category === "uncertainty" || textContent.includes("evidence gap") || textContent.includes("missing") || textContent.includes("unclear") || textContent.includes("void")) {
+                badgeLabel = "Evidence Gap";
+                badgeColor = "text-blue-700 bg-blue-50 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800/40";
+              }
+
+              // Contextual title if title is generic
+              const displayTitle = finding.title && finding.title !== "Uncertainty / Evidence Gap"
+                ? finding.title
+                : (finding.description.length > 70 
+                    ? finding.description.split(".")[0].slice(0, 65) + "..." 
+                    : finding.description);
+
+              return (
+                <div 
+                  key={`risk-finding-${(finding as any).id || idx}-${idx}`}
+                  className="p-5 rounded-2xl bg-surface-white border border-border-default shadow-sm space-y-4 hover:border-slate-300 dark:hover:border-slate-700 transition-colors"
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="flex items-center gap-2.5">
+                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${badgeColor}`}>
+                        {badgeLabel}
+                      </span>
+                      {confPct !== null && (
+                        <span className="text-xs text-text-muted font-medium">
+                          {confPct}% Model Confidence
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-text-muted font-medium">
+                        {finding.evidence_count} primary citation{finding.evidence_count === 1 ? "" : "s"}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEvidence(finding.title, finding.description)}
+                        className="text-xs text-primary font-semibold hover:underline flex items-center gap-1 cursor-pointer ml-1"
+                      >
+                        <Search className="w-3.5 h-3.5" />
+                        <span>Inspect Sources</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 className="text-base font-bold text-text-strong">{displayTitle}</h4>
+                    <p className="text-xs sm:text-sm text-text-secondary mt-1.5 leading-relaxed">
+                      {finding.description}
+                    </p>
+                  </div>
+
+                  {/* Sources Preview if available */}
+                  {(finding.evidence_ids || (finding as any).sources) && (finding.evidence_ids || (finding as any).sources).length > 0 && (
+                    <div className="flex items-center gap-2 pt-1 overflow-x-auto text-xs text-text-muted">
+                      <span className="font-semibold text-[11px] uppercase tracking-wider shrink-0">Source IDs:</span>
+                      {(finding.evidence_ids || (finding as any).sources).map((src: string, sIdx: number) => (
+                        <span 
+                          key={`src-ref-${idx}-${sIdx}-${src}`}
+                          className="px-2 py-0.5 rounded bg-canvas-bg border border-border-default font-mono text-[11px] shrink-0"
+                        >
+                          {src}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="p-8 rounded-2xl bg-surface-white border border-border-default text-center space-y-3">
+            <HelpCircle className="w-8 h-8 text-text-muted mx-auto" />
+            <h4 className="text-sm font-bold text-text-strong">No Specific Threat Vectors Extracted</h4>
+            <p className="text-xs text-text-secondary max-w-md mx-auto leading-relaxed">
+              The automated extraction pipeline did not categorize explicit risk or uncertainty findings for this analysis. 
+              Review the complete raw corpus in the Evidence Explorer for detailed technical papers and repository discussions.
+            </p>
+            {onSwitchTab && (
+              <button
+                type="button"
+                onClick={() => onSwitchTab("evidence")}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-white text-xs font-semibold hover:opacity-95 transition-opacity cursor-pointer mt-2"
+              >
+                <span>Open Evidence Explorer</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        )}
+      </div>
 
-                <span className="text-xs text-text-muted font-medium">
-                  Evidence Citations: {risk.evidenceCount} primary sources
-                </span>
-              </div>
+      {/* Information Voids & Pipeline Limitations Warning */}
+      <div className="p-6 rounded-2xl bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200/80 dark:border-amber-800/40 space-y-4">
+        <div className="flex items-center gap-2 text-amber-800 dark:text-amber-300">
+          <Info className="w-5 h-5 shrink-0" />
+          <h3 className="text-sm font-bold uppercase tracking-wider">
+            Evidence Pipeline Boundaries & Known Information Gaps
+          </h3>
+        </div>
 
-              <div>
-                <h4 className="text-base font-bold text-text-strong">{risk.title}</h4>
-                <p className="text-xs sm:text-sm text-text-secondary mt-1.5 leading-relaxed">
-                  {risk.description}
-                </p>
-              </div>
+        <p className="text-xs text-text-secondary leading-relaxed">
+          DIME bases this risk analysis strictly on the <span className="font-semibold text-text-strong">{corpusStats.total} verified documents</span> currently ingested in your workspace corpus 
+          ({corpusStats.papers} peer-reviewed research papers via Semantic Scholar & Crossref, {corpusStats.repos} open-source repositories via GitHub REST API).
+        </p>
 
-              {/* Actionable Mitigation Box */}
-              <div className="p-4 rounded-xl bg-orange-50/40 dark:bg-orange-950/20 border border-orange-200/70 dark:border-orange-800/40 space-y-1">
-                <div className="text-[11px] font-bold text-orange-900 dark:text-orange-300 flex items-center gap-1.5 uppercase tracking-wider">
-                  <Shield className="w-3.5 h-3.5 text-primary" />
-                  <span>Recommended Strategic Mitigation</span>
-                </div>
-                <p className="text-xs text-text-strong dark:text-slate-200 leading-relaxed font-medium">
-                  {risk.mitigation}
-                </p>
-              </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+          <div className="p-3.5 rounded-xl bg-surface-white/80 dark:bg-slate-900/50 border border-amber-200/60 dark:border-amber-800/30 space-y-1">
+            <div className="text-xs font-bold text-amber-900 dark:text-amber-300 flex items-center gap-1.5">
+              <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Observed & Verified Coverage</span>
             </div>
-          ))}
+            <p className="text-[11px] text-text-secondary leading-relaxed">
+              Algorithmic feasibility, code implementation patterns, architectural dependencies, benchmark performance metrics, and open-source license compatibility.
+            </p>
+          </div>
+
+          <div className="p-3.5 rounded-xl bg-surface-white/80 dark:bg-slate-900/50 border border-amber-200/60 dark:border-amber-800/30 space-y-1">
+            <div className="text-xs font-bold text-amber-900 dark:text-amber-300 flex items-center gap-1.5">
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+              <span>Unverified Commercial Variables</span>
+            </div>
+            <p className="text-[11px] text-text-secondary leading-relaxed">
+              Private SaaS pricing, customer contract sizes, CAC/LTV benchmarks, and proprietary vendor enterprise SLAs. These cannot be inferred from repository code or academic papers.
+            </p>
+          </div>
         </div>
       </div>
 
-      {/* Chronological Recommendations Roadmap */}
+      {/* Prioritized De-risking Milestones (P0, P1, P2) */}
       <div className="p-6 rounded-2xl bg-surface-white border border-border-default shadow-sm space-y-5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Compass className="w-5 h-5 text-primary" />
-            <h3 className="text-base font-bold text-text-strong">Actionable Chronological Recommendations</h3>
+            <h3 className="text-base font-bold text-text-strong">Prioritized De-risking Sequence</h3>
           </div>
-          <span className="text-xs text-text-muted">3-Stage De-risking Sequence</span>
+          <span className="text-xs text-text-muted font-medium">
+            Derived from Ingested MVP Directives
+          </span>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="p-4 rounded-xl border border-red-200 bg-red-50/20 dark:bg-red-950/20 dark:border-red-900/40 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-600 text-white uppercase">
-                Stage 1: Days 0–30
-              </span>
-              <span className="text-[10px] text-text-muted font-bold">Immediate</span>
-            </div>
-            <h4 className="text-xs sm:text-sm font-bold text-text-strong">Architecture & Compliance Guardrails</h4>
-            <p className="text-xs text-text-secondary leading-relaxed">
-              Formulate data retention policies, execute privacy compliance agreements, and validate core algorithmic accuracy against representative real-world test inputs.
-            </p>
-          </div>
+        {prioritizedMilestones.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {prioritizedMilestones.map((stage, idx) => {
+              const badgeStyle = stage.priority === "P0"
+                ? "bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border-rose-300"
+                : stage.priority === "P1"
+                ? "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300"
+                : "bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border-blue-300";
 
-          <div className="p-4 rounded-xl border border-amber-200 bg-amber-50/20 dark:bg-amber-950/20 dark:border-amber-900/40 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-600 text-white uppercase">
-                Stage 2: Days 30–90
-              </span>
-              <span className="text-[10px] text-text-muted font-bold">Short-Term</span>
-            </div>
-            <h4 className="text-xs sm:text-sm font-bold text-text-strong">Co-Development Pilot Validation</h4>
-            <p className="text-xs text-text-secondary leading-relaxed">
-              Secure 3–5 design partner pilots in the target audience to validate workflow adoption speed, calculate real-world ROI, and isolate integration friction.
-            </p>
-          </div>
+              return (
+                <div 
+                  key={`stage-${stage.priority}-${idx}`}
+                  className="p-4 rounded-xl border border-border-default bg-canvas-bg space-y-2.5 flex flex-col justify-between"
+                >
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${badgeStyle}`}>
+                        {stage.stageLabel}
+                      </span>
+                      <span className="text-[10px] text-text-muted font-medium">
+                        {stage.sourceCategory}
+                      </span>
+                    </div>
 
-          <div className="p-4 rounded-xl border border-slate-200 bg-canvas-bg dark:border-slate-800 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-600 text-white uppercase">
-                Stage 3: Days 90–180
-              </span>
-              <span className="text-[10px] text-text-muted font-bold">Medium-Term</span>
-            </div>
-            <h4 className="text-xs sm:text-sm font-bold text-text-strong">Defensibility & Moat Expansion</h4>
-            <p className="text-xs text-text-secondary leading-relaxed">
-              Expand proprietary integrations with adjacent enterprise systems, automate routine customer touchpoints, and leverage accumulated telemetry to deepen competitive moats.
-            </p>
+                    <h4 className="text-xs sm:text-sm font-bold text-text-strong">
+                      {stage.title}
+                    </h4>
+
+                    <p className="text-xs text-text-secondary leading-relaxed font-medium">
+                      {stage.description}
+                    </p>
+                  </div>
+
+                  <div className="pt-2 border-t border-border-subtle flex items-center justify-between text-[11px] text-text-muted">
+                    <span>Validation Directive</span>
+                    {stage.timeline && (
+                      <span className="font-semibold text-text-strong px-2 py-0.5 rounded bg-surface-white border border-border-subtle text-[10px]">
+                        {stage.timeline}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
-        </div>
+        ) : (
+          <div className="p-6 rounded-xl bg-canvas-bg border border-border-default text-center space-y-2">
+            <p className="text-xs text-text-secondary">
+              No MVP execution directives or strategic gaps recorded in the current synthesis output.
+            </p>
+            {onSwitchTab && (
+              <button
+                type="button"
+                onClick={() => onSwitchTab("technical")}
+                className="text-xs text-primary font-semibold hover:underline cursor-pointer"
+              >
+                Review Technical Feasibility Architecture &rarr;
+              </button>
+            )}
+          </div>
+        )}
       </div>
+
+      {/* Slide-out Modal / Drawer for Inspecting Citations */}
+      {selectedRiskEvidence && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex justify-end animate-fadeIn">
+          <div className="w-full max-w-xl bg-surface-white h-full shadow-2xl flex flex-col border-l border-border-default">
+            {/* Drawer Header */}
+            <div className="p-5 border-b border-border-default flex items-center justify-between gap-3 bg-surface-white">
+              <div className="space-y-0.5">
+                <div className="text-[11px] font-bold text-primary uppercase tracking-wider flex items-center gap-1.5">
+                  <Database className="w-3.5 h-3.5" />
+                  <span>Evidence Passage Verification</span>
+                </div>
+                <h3 className="text-sm font-bold text-text-strong line-clamp-1">
+                  {selectedRiskEvidence.riskTitle}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedRiskEvidence(null)}
+                className="p-1.5 rounded-lg text-text-muted hover:text-text-strong hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Drawer Content */}
+            <div className="p-5 overflow-y-auto flex-1 space-y-4">
+              <div className="text-xs text-text-secondary">
+                Showing primary citations matched from your ingested research corpus ({selectedRiskEvidence.items.length} passages):
+              </div>
+
+              {selectedRiskEvidence.items.map((item, idx) => (
+                <div 
+                  key={`ev-item-${item.id || idx}-${idx}`}
+                  className="p-4 rounded-xl border border-border-default bg-canvas-bg space-y-2.5"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-slate-200 dark:bg-slate-800 text-text-strong">
+                      {(item as any).source_type || item.evidence_type || "Corpus Document"}
+                    </span>
+                    {item.confidence !== undefined && (
+                      <span className="text-[11px] font-medium text-text-muted">
+                        Relevance: {Math.round(item.confidence * 100)}%
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="text-xs font-bold text-text-strong">
+                    {item.source_title || "Untitled Source Document"}
+                  </div>
+
+                  <blockquote className="text-xs text-text-secondary italic border-l-2 border-primary/40 pl-3 py-1 bg-surface-white rounded-r">
+                    &ldquo;{item.supporting_text || item.claim || (item as any).text}&rdquo;
+                  </blockquote>
+
+                  {(item.source_url || (item as any).url) && (
+                    <div className="pt-1">
+                      <a 
+                        href={item.source_url || (item as any).url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline"
+                      >
+                        <span>View Original Publication / Repository</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Drawer Footer */}
+            <div className="p-4 border-t border-border-default bg-slate-50 dark:bg-slate-900/50 flex justify-between items-center">
+              <span className="text-[11px] text-text-muted">
+                DIME Vector Retrieval via Qdrant
+              </span>
+              <button
+                type="button"
+                onClick={() => setSelectedRiskEvidence(null)}
+                className="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 text-text-strong text-xs font-semibold hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+              >
+                Close Drawer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

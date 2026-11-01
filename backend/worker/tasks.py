@@ -68,6 +68,24 @@ async def _run_analysis_pipeline_async(analysis_id: UUID) -> None:
                 analysis.started_at = datetime.now(timezone.utc)
             await session.commit()
             
+            # Retrieve operational constraints from the Idea record if available
+            idea_constraints: dict[str, Any] = {}
+            if analysis.idea_id:
+                try:
+                    res = await session.execute(
+                        text("""
+                            SELECT "budget", "teamSize", "timeline", "preferredTechnologies", "formFactors", "analysisDepth"
+                            FROM "Idea"
+                            WHERE "id" = :idea_id
+                        """),
+                        {"idea_id": analysis.idea_id}
+                    )
+                    row = res.mappings().first()
+                    if row:
+                        idea_constraints = dict(row)
+                except Exception as db_err:
+                    logger.warning(f"Failed to query operational constraints for idea {analysis.idea_id}: {db_err}")
+
             from backend.workflow.graph import analysis_graph
             
             initial_state: dict[str, Any] = {
@@ -77,7 +95,16 @@ async def _run_analysis_pipeline_async(analysis_id: UUID) -> None:
                     "title": analysis.title,
                     "description": analysis.description,
                     "domain": analysis.domain,
-                    "target_audience": analysis.target_audience
+                    "target_audience": analysis.target_audience,
+                    "budget": idea_constraints.get("budget"),
+                    "team_size": idea_constraints.get("teamSize"),
+                    "teamSize": idea_constraints.get("teamSize"),
+                    "timeline": idea_constraints.get("timeline"),
+                    "preferred_technologies": idea_constraints.get("preferredTechnologies"),
+                    "preferredTechnologies": idea_constraints.get("preferredTechnologies"),
+                    "form_factors": idea_constraints.get("formFactors"),
+                    "formFactors": idea_constraints.get("formFactors"),
+                    "analysis_depth": idea_constraints.get("analysisDepth"),
                 },
                 "status": AnalysisStatus.RUNNING.value,
                 "current_stage": "STARTING",

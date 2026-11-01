@@ -18,7 +18,18 @@ export interface StructuredDraftState {
 interface StructuredFormViewProps {
   draft: StructuredDraftState;
   onUpdateDraft: (updates: Partial<StructuredDraftState>) => void;
-  onSaveDraftToDb: (data: { title: string; description: string; targetAudience: string; industry: string }) => Promise<void>;
+  onSaveDraftToDb: (data: {
+    title: string;
+    description: string;
+    targetAudience: string;
+    industry: string;
+    formFactors?: string[];
+    budget?: string;
+    teamSize?: string;
+    timeline?: string;
+    preferredTechnologies?: string[] | string;
+    analysisDepth?: string;
+  }) => Promise<void>;
   isSavingDraft: boolean;
 }
 
@@ -73,6 +84,12 @@ export function StructuredFormView({
       description: coreState.description,
       targetAudience: coreState.targetAudience,
       industry: classState.domains.join(", ") || "General",
+      formFactors: classState.formFactors,
+      budget: opState.budget,
+      teamSize: opState.teamSize,
+      timeline: opState.timeline,
+      preferredTechnologies: opState.preferredTechnologies.split(",").map(t => t.trim()).filter(Boolean),
+      analysisDepth: depthState.depth,
     });
   };
 

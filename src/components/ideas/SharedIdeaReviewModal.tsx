@@ -33,6 +33,11 @@ export interface ExtractedIdeaData {
   user_provided_fields?: string[];
   inferred_fields?: string[];
   unknown_fields?: string[];
+  budget?: string | null;
+  team_size?: string | null;
+  timeline?: string | null;
+  preferred_technologies?: string[];
+  form_factors?: string[];
 }
 
 interface SharedIdeaReviewModalProps {
