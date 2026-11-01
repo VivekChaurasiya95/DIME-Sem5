@@ -47,7 +47,7 @@ export function MultiModeIdeaValidation() {
   // ── Mode C: AI Idea Builder Conversation Draft ────────────
   const [builderMessages, setBuilderMessages] = useState<ChatMessage[]>([]);
 
-  // Seamless draft synchronization when switching modes
+  // Seamless draft synchronization when switching modes (Modes A and B only; Mode C is protected)
   const handleSelectMode = (newMode: ValidationMode) => {
     // If user filled in describeDraft and structured form is empty, sync them
     if (newMode === "structured" && describeDraft.rawDescription && !structuredDraft.coreState.description) {
@@ -58,6 +58,17 @@ export function MultiModeIdeaValidation() {
           description: describeDraft.rawDescription,
           targetAudience: describeDraft.targetAudience || prev.coreState.targetAudience,
         },
+        classState: {
+          ...prev.classState,
+          domains: describeDraft.industry ? [describeDraft.industry] : prev.classState.domains,
+        },
+        opState: {
+          ...prev.opState,
+          budget: describeDraft.budget || prev.opState.budget,
+          teamSize: describeDraft.teamSize || prev.opState.teamSize,
+          timeline: describeDraft.timeline || prev.opState.timeline,
+          preferredTechnologies: describeDraft.preferredTechnologies || prev.opState.preferredTechnologies,
+        },
       }));
     }
 
@@ -67,6 +78,11 @@ export function MultiModeIdeaValidation() {
         ...prev,
         rawDescription: structuredDraft.coreState.description,
         targetAudience: structuredDraft.coreState.targetAudience,
+        industry: structuredDraft.classState.domains.join(", ") || prev.industry,
+        budget: structuredDraft.opState.budget || prev.budget,
+        teamSize: structuredDraft.opState.teamSize || prev.teamSize,
+        timeline: structuredDraft.opState.timeline || prev.timeline,
+        preferredTechnologies: structuredDraft.opState.preferredTechnologies || prev.preferredTechnologies,
       }));
     }
 
@@ -79,6 +95,12 @@ export function MultiModeIdeaValidation() {
     description: string;
     targetAudience: string;
     industry: string;
+    formFactors?: string[];
+    budget?: string;
+    teamSize?: string;
+    timeline?: string;
+    preferredTechnologies?: string[] | string;
+    analysisDepth?: string;
   }) => {
     setIsSavingDraft(true);
     try {
@@ -90,6 +112,12 @@ export function MultiModeIdeaValidation() {
           description: data.description,
           targetAudience: data.targetAudience,
           industry: data.industry,
+          formFactors: data.formFactors,
+          budget: data.budget,
+          teamSize: data.teamSize,
+          timeline: data.timeline,
+          preferredTechnologies: data.preferredTechnologies,
+          analysisDepth: data.analysisDepth,
         }),
       });
 

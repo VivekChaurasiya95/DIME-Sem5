@@ -199,9 +199,24 @@ class IdeaExtractionService:
             user_provided.append("proposed_solution")
         if bullets:
             user_provided.append("core_features")
+        if request.budget:
+            user_provided.append("budget")
+        if request.team_size:
+            user_provided.append("team_size")
+        if request.timeline:
+            user_provided.append("timeline")
+        if request.preferred_technologies:
+            user_provided.append("preferred_technologies")
 
         inferred = [f for f in ["industry", "target_audience", "business_model", "assumptions"] if f not in user_provided]
         unknown = [f for f in ["known_competitors", "geographic_market", "missing_information"] if f not in user_provided]
+
+        tech_list = []
+        if request.preferred_technologies:
+            if isinstance(request.preferred_technologies, list):
+                tech_list = [str(t) for t in request.preferred_technologies]
+            else:
+                tech_list = [t.strip() for t in str(request.preferred_technologies).split(",") if t.strip()]
 
         return ExtractedIdeaResponse(
             title=title,
@@ -219,6 +234,10 @@ class IdeaExtractionService:
             user_provided_fields=user_provided,
             inferred_fields=inferred,
             unknown_fields=unknown,
+            budget=request.budget,
+            team_size=request.team_size,
+            timeline=request.timeline,
+            preferred_technologies=tech_list,
         )
 
     async def extract_from_natural_language(
@@ -238,6 +257,14 @@ class IdeaExtractionService:
             hints_section.append(f"- User-Specified Competitors: {request.known_competitors}")
         if request.assumptions:
             hints_section.append(f"- User Assumptions: {request.assumptions}")
+        if request.budget:
+            hints_section.append(f"- User-Specified Budget: {request.budget}")
+        if request.team_size:
+            hints_section.append(f"- User-Specified Team Composition: {request.team_size}")
+        if request.timeline:
+            hints_section.append(f"- User-Specified Timeline: {request.timeline}")
+        if request.preferred_technologies:
+            hints_section.append(f"- User-Specified Preferred Technologies: {request.preferred_technologies}")
 
         hints_text = "\n".join(hints_section) if hints_section else "None provided."
 
@@ -252,11 +279,32 @@ Analyze the above idea description and optional hints. Extract a structured repr
 Be realistic, grounded, and clearly distinguish user-provided vs inferred vs unknown information.
 """
         try:
-            return await self.provider.structured_generate(
+            res = await self.provider.structured_generate(
                 prompt=prompt,
                 response_model=ExtractedIdeaResponse,
                 system_prompt=EXTRACTION_SYSTEM_PROMPT,
             )
+            # Ensure explicitly supplied user constraints override or populate
+            if request.budget and not res.budget:
+                res.budget = request.budget
+                if "budget" not in res.user_provided_fields:
+                    res.user_provided_fields.append("budget")
+            if request.team_size and not res.team_size:
+                res.team_size = request.team_size
+                if "team_size" not in res.user_provided_fields:
+                    res.user_provided_fields.append("team_size")
+            if request.timeline and not res.timeline:
+                res.timeline = request.timeline
+                if "timeline" not in res.user_provided_fields:
+                    res.user_provided_fields.append("timeline")
+            if request.preferred_technologies and not res.preferred_technologies:
+                if isinstance(request.preferred_technologies, list):
+                    res.preferred_technologies = [str(t) for t in request.preferred_technologies]
+                else:
+                    res.preferred_technologies = [t.strip() for t in str(request.preferred_technologies).split(",") if t.strip()]
+                if "preferred_technologies" not in res.user_provided_fields:
+                    res.user_provided_fields.append("preferred_technologies")
+            return res
         except Exception as exc:
             logger.warning(
                 "All LLM extraction providers failed or were rate-limited (%s). Executing deterministic heuristic extraction fallback.",

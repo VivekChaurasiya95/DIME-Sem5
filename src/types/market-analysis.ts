@@ -76,6 +76,7 @@ export interface MarketSummaryMetrics {
     isAvailable: boolean;
     status?: "available" | "unavailable";
   };
+  fiveKpiCards?: FiveKpiCards;
 }
 
 export interface DemandChartPoint {

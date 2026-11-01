@@ -67,12 +67,16 @@ Description: {idea.get('description', 'N/A')}
         validated_competitors = []
         for comp in raw_findings.competitors:
             valid_refs = [ref for ref in comp.evidence_references if ref in valid_chunk_ids]
-            
-            if not valid_refs:
-                logger.warning(f"Discarding competitor '{comp.competitor}' due to missing evidence.")
-                continue
-                
             comp.evidence_references = valid_refs
+            
+            # If no chunk IDs exist in indexed technical evidence, preserve candidate as market hypothesis
+            if not valid_refs:
+                logger.info(f"Retaining recognized commercial competitor '{comp.competitor}' as market candidate without indexed repository chunks.")
+                if not comp.uncertainties:
+                    comp.uncertainties = "Recognized market alternative; unverified in indexed technical evidence."
+                elif "unverified" not in comp.uncertainties.lower():
+                    comp.uncertainties = f"{comp.uncertainties} (Unverified in indexed technical evidence)"
+
             validated_competitors.append(comp)
 
         raw_findings.competitors = validated_competitors

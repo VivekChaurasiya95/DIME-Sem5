@@ -48,7 +48,15 @@ export async function POST(req: Request) {
       if (existing) {
         await prisma.idea.update({
           where: { id: targetIdeaId },
-          data: { status: "ANALYZING" },
+          data: {
+            status: "ANALYZING",
+            formFactors,
+            budget,
+            teamSize,
+            timeline,
+            preferredTechnologies,
+            analysisDepth,
+          },
         });
       } else {
         targetIdeaId = null;
@@ -64,6 +72,12 @@ export async function POST(req: Request) {
           industry,
           userId: session.user.id,
           status: "ANALYZING",
+          formFactors,
+          budget,
+          teamSize,
+          timeline,
+          preferredTechnologies,
+          analysisDepth,
         },
       });
       targetIdeaId = created.id;
@@ -85,6 +99,11 @@ export async function POST(req: Request) {
       targetAudience,
       industry,
       analysisDepth,
+      budget,
+      teamSize,
+      timeline,
+      preferredTechnologies,
+      formFactors,
       idea_id: targetIdeaId,
       user_id: session.user.id,
     });
